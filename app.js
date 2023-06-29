@@ -1,130 +1,117 @@
 const express = require('express');
-const { element } = require('xml');
+const sqlite3 = require('sqlite3').verbose();
 const app = express();
+
+// Verbindung zur SQLite-Datenbank herstellen
+const db = new sqlite3.Database('./database.db', (err) => {
+  if (err) {
+    console.error(err.message);
+  } else {
+    console.log('Verbindung zur SQLite erfolgreich hergestellt');
+  }
+});
+
+app.use(express.json());
 
 const port = 3000;
 const hostname = 'localhost';
 
-app.use(express.json());
-
-let restaurants = [
-    {
-        name : "Bobs Burgers",
-        adresse : "Zum Burgerladen 1, 12345 Burgerhausen",
-        kategorie : "Burgerbude"
-    },
-    {
-        name: "Testaurante",
-        adresse: "Teststr. 1, 12345 Testhausen",
-        kategorie: "Test"
-    },
-    {
-        name: "Pizzeria Luigi",
-        adresse: "Teststr. 1, 12345 Testhausen",
-        kategorie: "Test"
-    }
-];
-
-function getIndex(name) {
-    let index = -1;
-    for (let i=0 ; i<restaurants.length ; i++) {
-        if (restaurants[i].name == name) {
-            index = i;
-        }
-    }
-    return index;
-}
-
-function delRestaurant(name) {
-    const index = getIndex(name);
-    let deleted = restaurants.splice(index,1);
-    return deleted;
-}
-
-const exists = (name) => {
-    let result = restaurants.find((elem) => {
-        if (elem.name == name) {
-            return true;
-        }
-    });
-    if (result) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
+//Auflistung aller DB Einträge
 app.get('/restaurants', (_, res) => {
-    res.send(restaurants);
-});
-
-app.post('/restaurant', (req, res) => {
-    let r = req.body;
-    //Prüfe ob alle erforderlichen Daten vorhanden sind. 
-    if (!r.name || !r.adresse || !r.kategorie){
-        res.send("Objekt ist nicht vollständig! Mindestens eins der folgenden Dinge fehlt: Name, Adresse, Kategorie" );
-    } else {
-        let e = exists(r.name);
-        if (!e) {
-            restaurants.push(r);
-            res.status(201);
-            res.send("Restaurant wurde hinzugefügt.");
-        } else {
-            res.status(409);
-            res.send("Restaurant ist bereits gespeichert.");
+    const query = "SELECT*FROM restaurants";
+    db.all(query, (err, rows) => {
+        if (err){
+            res.status(500);
+            res.send("Daten konnten nicht abgerufen werden.")
+        }else {
+            res.send(rows);
         }
-    }
+    })
 });
 
-app.get('/restaurant/:name' , (req, res) => {
-    // Variable für Suchergebnis anlegen (undefined)
-    let result;
-    //Suche nach Restaurant in Liste
-    restaurants.forEach((elem) =>  {
-        if (elem.name === req.params.name) {
-            // Wenn Element in Liste gefunden, speichere in Variable Restaurnt
-            result = elem;
+//Bestimmtes Restaurant suchen
+app.get('/restaurant/:name', (req, res) => {
+    const query = "SELECT*FROM restaurants WHERE name=?";
+    db.get(query, [req.params.name], (err, row) => {
+        if (err){
+            res.status(500);
+            res.send("Daten konnten nicht abgerufen werden.")
+        }else if (row){
+            res.send(row);
+        }else {
+            res.status(404);
+            res.send("Eintrag nicht vorhanden.")
+        }
+    })
+});
+
+//Neuen DB Restaurant Eintrag erzeugen
+app.post('/restaurant', (req, res) => {
+    const r = req.body;
+    if (!r.name || !r.adresse || !r.kategorie) {
+            res.status(400);
+            res.send("Objekt ist nicht vollständig.");
+        } else {
+            const query = "INSERT INTO restaurants (name, adresse, kategorie) VALUES (?, ?, ?)";
+            db.run(query, [r.name, r.adresse, r.kategorie], function(err){
+                if(err){
+                    res.status(500);
+                    res.send("Fehler beim hinzufügen des Restaurants zur Datenbank.")
+                 } else {
+            res.status(201);
+            res.send("Restaurant wurde hinzugefügt")
+        }
+    })
+}});
+
+//Aktualisieren der Daten in der DB für bestimmtes Restaurant
+app.put('/restaurant/:name', (req, res) => {
+    const r = req.body;
+    if (r.name && r.adresse && r.kategorie) {
+        const query = "UPDATE restaurants SET name=?, adresse=?, kategorie=? WHERE name=?";
+        db.run(query, [r.name, r.adresse, r.kategorie, req.params.name], function(err){
+            if(err){
+                res.status(500);
+                res.send("Fehler beim aktualisieren der Datenbank.")
+                } else if (this.changes === 0){
+                    res.status(404);
+                    res.send("Restaurante nicht gefunden.")
+                }
+                 else {
+                    res.send(r);
+                    console.log(`Aktualisiere: ${req.params.name}: ${r.name}, ${r.adresse}, ${r.kategorie}`)
         }
     });
-    //Gib Ergebnis der Suche zurück
-    if (result) {
-        res.send(result);
-    } else {
-        res.status(404);
-        res.send("Existiert nicht.");
-    }
-});
+} else {
+    res.status(400);
+    res.send("Daten unvollständig. Wurde nicht aktualisiert.")
+}});
 
-// * Restaurant aktualisieren mit löschen
-app.put('/restaurant/:name', (req, res) => {
-    if ( getIndex(req.params.name) != -1) {
-        const r = req.body;
-        if ( r.name && r.adresse && r.kategorie) {
-            delRestaurant(r.name);
-            restaurants.push(r);
-            // TODO (löschen & neu einfügen?)
-            res.send(r); // TODO neues Restaurant zurückgeben */
-            console.log(`Aktualisiere: ${req.params.name}: ${r.name}, ${r.adresse}, ${r.kategorie}.`);
-        } else {
-            res.status(400);
-            res.send("Daten unvollständig, nicht aktualisiert.");
-        }
-    } else {
-        res.status(404);
-        res.send("Restaurant nicht gefunden.")
-    }
-});
-
+//Löschen eines DB Eintrages
 app.delete('/restaurant/:name', (req, res) => {
-    if (getIndex(req.params.name) != -1) {
-            let del = delRestaurant(req.params.name);
-            res.send("Folgendes Restaurant wurde gelöscht: " + JSON.stringify(del));
-    } else {
-        res.status(404);
-        res.send("Restaurant ist nicht vorhanden.");
-    }
+        const query = "DELETE FROM restaurants WHERE name=?";
+        db.run(query, [req.params.name], function(err){
+            if(err){
+                res.status(500);
+                res.send("Fehler beim Löschen des Eintrags aus der Datenbank.")
+                } else if (this.changes === 0){
+                    res.status(404);
+                    res.send("Restaurante nicht gefunden.")
+                }
+                 else {
+                    res.send(`Folgender Eintrag wurde entfernt: ${req.params.name}`);
+        }
+    });
 });
 
+//Server starten
 app.listen(port, hostname, () => {
     console.log(`Server gestartet ${hostname}:${port}.`)
 });
+
+//verbindung trennen
+process.on('SIGINT', () => {
+    console.log("Database connection closed.");
+    db.close();
+    process.exit();
+})
