@@ -1,9 +1,21 @@
+const { MongoClient } = require("mongodb");
 const express = require('express');
 const { element } = require('xml');
 const app = express();
 
+//http Server Verbindung
 const port = 3000;
 const hostname = 'localhost';
+
+//MongoDB Verbinden
+const uri = "mongodb+srv://Basti:RyxcCPT6oFJTTe2m@cluster0.s8msw7w.mongodb.net/?retryWrites=true&w=majority";
+const client = new MongoClient(uri);
+client.connect();
+client.connect().then(() => console.log("Connected to MongoDB"));
+const db = client.db("database");
+const coll = db.collection("restaurant");
+
+db.command({ ping: 1 });
 
 app.use(express.json());
 
@@ -55,7 +67,11 @@ const exists = (name) => {
 }
 
 app.get('/restaurants', (_, res) => {
-    res.send(restaurants);
+    const cursor = coll.find();
+    let a = [];
+    cursor.on("data", data => console.log(data));
+    cursor.forEach(a.push);
+    res.send(a);
 });
 
 app.post('/restaurant', (req, res) => {
@@ -128,3 +144,10 @@ app.delete('/restaurant/:name', (req, res) => {
 app.listen(port, hostname, () => {
     console.log(`Server gestartet ${hostname}:${port}.`)
 });
+
+//verbindung trennen
+process.on('SIGINT', () => {
+    client.close();
+    console.log("Database connection closed.");
+    process.exit();
+})
