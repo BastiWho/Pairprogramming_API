@@ -8,7 +8,7 @@ const port = 3000;
 const hostname = 'localhost';
 
 //MongoDB Verbinden
-const uri = "mongodb+srv://Basti:RyxcCPT6oFJTTe2m@cluster0.s8msw7w.mongodb.net/?retryWrites=true&w=majority";
+const uri = "mongodb+srv://Basti:@cluster0.s8msw7w.mongodb.net/?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 client.connect();
 client.connect().then(() => console.log("Connected to MongoDB"));
